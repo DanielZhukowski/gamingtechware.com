@@ -5,6 +5,10 @@
     <title><%= pageTitle ? pageTitle + ' | ' : '' %><%= siteName || 'gamingtechware.com' %></title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Gaming Tech Ware delivers fact-checked gaming news across console, PC, mobile, esports, and hardware in a clear, rewritten format." />
+    <% const robotsContent = typeof metaRobots !== 'undefined' ? metaRobots : null; %>
+    <% if (robotsContent) { %>
+      <meta name="robots" content="<%= robotsContent %>" />
+    <% } %>
     <link rel="canonical" href="<%= canonicalUrl || siteBaseUrl %>" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" href="/logo.png" />
