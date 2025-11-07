@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const dotenv = require('dotenv');
 const RSSParser = require('rss-parser');
@@ -144,7 +145,19 @@ if (!FEED_URL) {
 }
 
 app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
+const candidateViewPaths = [
+  path.join(__dirname, 'views'),
+  path.join(process.cwd(), 'views')
+];
+const resolvedViewPath =
+  candidateViewPaths.find((viewsPath) => {
+    try {
+      return fs.statSync(viewsPath).isDirectory();
+    } catch (error) {
+      return false;
+    }
+  }) || candidateViewPaths[0];
+app.set('views', resolvedViewPath);
 app.locals.siteName = 'gamingtechware.com';
 app.locals.language = 'en';
 
@@ -279,6 +292,17 @@ const INTRO_PHRASES = [
   'Industry observers note that ',
   'As part of the ongoing story, ',
   'The report highlights that '
+];
+
+const IMAGE_WIDTH = 1200;
+const IMAGE_HEIGHT = 630;
+const IMAGE_TEXT_LINE_LENGTH = 32;
+const IMAGE_COLOR_PALETTES = [
+  ['#0f172a', '#1d4ed8'],
+  ['#312e81', '#9333ea'],
+  ['#0f766e', '#14b8a6'],
+  ['#7f1d1d', '#f97316'],
+  ['#1e3a8a', '#38bdf8']
 ];
 
 const SYNONYM_REGEX = new RegExp(
@@ -783,6 +807,70 @@ const buildArticleDescription = (paragraphs, fallbackText) => {
   }
 
   return condenseWhitespace(fallbackText || '').slice(0, 400);
+};
+
+const hashToIndex = (value, modulo) => {
+  const hash = hashString(value || '');
+  return hash % modulo;
+};
+
+const wrapTextForImage = (text, maxLength) => {
+  const words = (text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let currentLine = '';
+
+  words.forEach((word) => {
+    if ((currentLine + ' ' + word).trim().length > maxLength) {
+      if (currentLine.length > 0) {
+        lines.push(currentLine.trim());
+      }
+      currentLine = word;
+    } else {
+      currentLine = currentLine.length > 0 ? `${currentLine} ${word}` : word;
+    }
+  });
+
+  if (currentLine.length > 0) {
+    lines.push(currentLine.trim());
+  }
+
+  return lines.slice(0, 5);
+};
+
+const buildArticleImageSvg = (article) => {
+  const title = article.title || article.originalTitle || 'Latest update';
+  const palette = IMAGE_COLOR_PALETTES[hashToIndex(article.slug || title, IMAGE_COLOR_PALETTES.length)];
+  const [startColor, endColor] = palette;
+  const lines = wrapTextForImage(title, IMAGE_TEXT_LINE_LENGTH);
+  const lineHeight = 56;
+  const startY = IMAGE_HEIGHT / 2 - (lines.length * lineHeight) / 2;
+  const body =
+    lines.length > 0
+      ? lines
+          .map(
+            (line, index) =>
+              `<text x="80" y="${startY + index * lineHeight}" font-size="44" font-weight="700" fill="#f8fafc">${escapeForXml(
+                line
+              )}</text>`
+          )
+          .join('\n')
+      : '';
+
+  const siteLabel = escapeForXml(app.locals.siteName || 'gamingtechware.com');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" viewBox="0 0 ${IMAGE_WIDTH} ${IMAGE_HEIGHT}" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad-${article.slug}" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${startColor}" />
+      <stop offset="100%" stop-color="${endColor}" />
+    </linearGradient>
+  </defs>
+  <rect width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" fill="url(#grad-${article.slug})" rx="32" />
+  <rect x="60" y="60" width="${IMAGE_WIDTH - 120}" height="${IMAGE_HEIGHT - 120}" fill="rgba(15,23,42,0.35)" rx="28" />
+  ${body}
+  <text x="80" y="${IMAGE_HEIGHT - 80}" font-size="32" font-weight="600" fill="#e2e8f0" letter-spacing="0.1em" text-transform="uppercase">${siteLabel.toUpperCase()}</text>
+</svg>`;
 };
 
 const resolveArticleParagraphs = (article) => {
@@ -1399,6 +1487,24 @@ app.get('/sitemap.xml', async (req, res, next) => {
   }
 });
 
+app.get('/images/:articleSlug.svg', async (req, res, next) => {
+  try {
+    const { articleSlug } = req.params;
+    const { articles } = await fetchFeed();
+    const article =
+      (articles || []).find((entry) => entry.slug === articleSlug) || {
+        slug: articleSlug,
+        title: 'Gaming Tech Ware'
+      };
+    const svg = buildArticleImageSvg(article);
+    res.set('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(svg);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get(FEED_ROUTE_PATHS, async (req, res, next) => {
   try {
     const { articles } = await fetchFeed();
@@ -1448,6 +1554,7 @@ app.get('/', async (req, res, next) => {
       categories,
       articles: paginatedArticles,
       lastFetched,
+      metaRobots: page > 1 ? 'noindex,follow' : null,
       pagination: {
         page,
         totalPages,
@@ -1497,6 +1604,7 @@ app.get('/category/:categorySlug', async (req, res, next) => {
       categories,
       articles: categoryArticles,
       lastFetched,
+      metaRobots: page > 1 ? 'noindex,follow' : null,
       pagination: {
         page,
         totalPages,
