@@ -15,6 +15,9 @@
             <span><%= article.publishedAt ? new Date(article.publishedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short'}) : 'Recently updated' %></span>
             <span>by <a href="/editorial-team">Editorial team</a></span>
           </p>
+          <div class="article-hero-image card-visual card-visual--large" aria-hidden="true">
+            <span class="card-visual-title"><%= article.title %></span>
+          </div>
           <div class="article-body">
             <%
               var bodyParagraphs = Array.isArray(article.paragraphs) && article.paragraphs.length

@@ -16,7 +16,9 @@
             <div class="grid">
               <% (articles || []).forEach(function(article) { %>
                 <article class="card">
-                  <h2><a href="/news/<%= article.slug %>"><%= article.title %></a></h2>
+                  <a class="card-visual card-visual-link" href="/news/<%= article.slug %>" aria-label="Read '<%= article.title %>'">
+                    <span class="card-visual-title"><%= article.title %></span>
+                  </a>
                   <p class="meta">
                     <span><%= article.publishedAt ? new Date(article.publishedAt).toLocaleString('en-US', { dateStyle: 'medium'}) : 'Recently updated' %></span>
                     <span>by <a href="/editorial-team">Editorial team</a></span>
